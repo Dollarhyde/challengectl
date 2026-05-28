@@ -1,6 +1,7 @@
 name: WAV format check
 
 on:
+  pull_request:
   push:
     paths:
       - 'flags-archive/**'

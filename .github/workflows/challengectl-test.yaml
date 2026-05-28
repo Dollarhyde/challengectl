@@ -1,6 +1,7 @@
 name: Challengectl test
 
 on:
+  pull_request:
   push:
 
 jobs:
