@@ -2,7 +2,8 @@ name: WAV format check
 
 on:
   pull_request:
-  push:
+    branches:
+      - master
     paths:
       - 'flags-archive/**'
 jobs:
