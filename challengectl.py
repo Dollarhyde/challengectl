@@ -260,7 +260,9 @@ def read_flags(flags_file):
     with open(flags_file) as f:
         reader = csv.reader(f)
         for row in reader:
-            flag_input.append(row)
+            # Skip blank lines in flags file
+            if(len(row) != 0):
+                flag_input.append(row)
     return flag_input
 
 def read_devices(devices_file):
