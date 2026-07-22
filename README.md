@@ -33,6 +33,8 @@ dev_id,osmosdr_device_string
 ```
 `create-devices-txt.py` will attempt to detect supported devices on your system, and automatically output a devices.txt file with a line for each of those devices.
 
+**TX Antenna Ports:** challengectl will transmit by default from the default transmit port on your SDR device, the only port if your SDR only has one transmit port, TX1 on bladeRF 2.0 Micro, TX/RX on a USRP B200 - whichever port is selected by an empty string passed to the antenna parameter for the Osmocom GNU Radio Sink. If you would like to transmit from a different port than the default, you will need to update the `get_antenna_port` function in challengectl.py to select a different port for the device. There is an example in that function, selecting TX2 for one of the RFHS bladeRF devices with a physically broken TX1 port. Setting transmit ports via configuration files will likely be in a future iteration of challengectl, but for now changing the transmit port requires updating the code.
+
 ### Supported Devices
 Any transmit capable device that can be used to transmit using a GNURadio gr-osmosdr sink *should* work, however only the following devices have been tested so far.
 - [Nuand bladeRF 2.0](https://www.nuand.com/bladerf-2-0-micro/)
