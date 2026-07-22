@@ -301,6 +301,7 @@ def get_antenna_port(device):
         antenna = "TX2"
         print("Set antenna to TX2")
     else:
+        # If you would like to use a different TX port, other than the default for your SDR, the logic to do so should go here.
         antenna = ""
         #print("Antenna set to default empty string. device: {}".format(device))
     return antenna
