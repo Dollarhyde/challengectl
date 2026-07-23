@@ -14,7 +14,7 @@ import string
 import argparse
 import subprocess
 
-from challenges import ask, cw, usb_tx, nbfm, spectrum_paint, pocsagtx_osmocom, lrs_pager, lrs_tx
+from challenges import ask, cw, usb_tx, nbfm, spectrum_paint, pocsagtx_osmocom, lrs_pager, lrs_tx, gotenna_pro_bladerf
 
 def build_database(flagfile, devicefile):
     """Create sqlite database based on flags file and devices file. Database file name will be based on
@@ -231,6 +231,32 @@ class transmitter:
         if(replaceinqueue != False):
             flag_q.put(flag_args[0])
         print("Returned flag to pool")
+
+    def fire_gotenna_pro(self, device_string, flag_q, device_q, *flag_args):
+        print("\nTransmitting goTenna Pro\n")
+        flag_args = flag_args[0]
+        flag = flag_args[1]
+        modopts = flag_args[2]
+        mintime = flag_args[4]
+        maxtime = flag_args[5]
+        freq = int(flag_args[6]) * 1000
+        norandsleep = flag_args[8]
+
+        gotennaopts = gotenna_pro_bladerf.argument_parser().parse_args(modopts.split())
+        gotennaopts.message = flag
+        gotennaopts.frequency = freq
+        gotennaopts.device_args = device_string
+
+        gotenna_pro_bladerf.main(options=gotennaopts)
+        sleep(3)
+        disable_amp(device_string)
+        device_q.put(device_string)
+
+        if(norandsleep == False):
+            sleep(randint(mintime, maxtime))
+        replaceinqueue = flag_args[7]
+        if(replaceinqueue != False):
+            flag_q.put(flag_args[0])
 
 
 def select_freq(band):
