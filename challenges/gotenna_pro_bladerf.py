@@ -22,7 +22,7 @@ from gnuradio import eng_notation
 import math
 
 try:
-    from . import gotenna_packet
+    from .gotenna_packet import gotenna_packet
 except ImportError:
     import gotenna_packet
 
