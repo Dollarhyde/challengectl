@@ -4,8 +4,7 @@ on:
   pull_request:
     branches:
       - master
-    paths:
-      - 'flags-archive/**'
+
 jobs:
   wav-format-check:
     runs-on: ubuntu-latest
@@ -20,5 +19,15 @@ jobs:
     
     - name: WAV format check
       run: |
+        CHANGED_FILES="$(git diff --name-only origin/${{ github.base_ref }}...origin/${{ github.head_ref }} | grep -E '^(flags-archive/)' || true)"
+
+        if [ -z "${CHANGED_FILES}" ]; then
+          echo "No files modified in flags-archive/. Skipping validation check."
+          exit 0
+        fi
+
+        echo "Files to check:"
+        echo "${CHANGED_FILES}"
+
         sudo apt-get install --no-install-recommends libimage-exiftool-perl -y
-        ./qa/wav-format-check $(git diff-tree --no-commit-id --name-only -r ${{ github.sha }} | grep -E '^(flags-archive/)')
+        ./qa/wav-format-check $CHANGED_FILES
