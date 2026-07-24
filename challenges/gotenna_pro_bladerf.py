@@ -21,10 +21,7 @@ from gnuradio.eng_arg import eng_float, intx
 from gnuradio import eng_notation
 import math
 
-try:
-    from .gotenna_packet import gotenna_packet
-except ImportError:
-    import gotenna_packet
+import challenges.gotenna_packet.gotenna_packet as gotenna_packet
 
 
 def validate_options(options):
