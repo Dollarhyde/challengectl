@@ -1,5 +1,7 @@
 #!/bin/bash
 
+## This tests all the wav files in flags-archive/
+
 if [ ! -x "$(command -v exiftool 2>&1)" ]; then
   printf 'Please install exiftool\n'
   exit 1
