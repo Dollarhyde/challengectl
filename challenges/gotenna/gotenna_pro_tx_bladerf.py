@@ -6,94 +6,66 @@
 #
 # GNU Radio Python Flow Graph
 # Title: Gotenna Pro Tx Bladerf
-# GNU Radio version: 3.10.7.0
+# GNU Radio version: 3.10.5.0
 
 from gnuradio import blocks
 from gnuradio import digital
 from gnuradio import filter
 from gnuradio.filter import firdes
 from gnuradio import gr
-import osmosdr
+from gnuradio.fft import window
 import sys
 import signal
 from argparse import ArgumentParser
 from gnuradio.eng_arg import eng_float, intx
 from gnuradio import eng_notation
+import gotenna_packet
 import math
+import osmosdr
+import time
 
-import challenges.gotenna_packet.gotenna_packet as gotenna_packet
 
-
-def validate_options(options):
-    packets = gotenna_packet.encode_pro_broadcast_packets(
-        options.message_type,
-        options.counter_num,
-        options.sender_gid,
-        options.recipient_gid,
-        options.callsign,
-        options.message,
-        options.publickey_data)
-    gotenna_packet.pro_gfsk_symbols(packets)
-    return packets
 
 
 class gotenna_pro_tx_bladerf(gr.top_block):
 
-    def __init__(
-            self,
-            baud_rate=9600,
-            bandwidth=1000000,
-            device_args="bladerf=0,biastee=1",
-            antenna='',
-            callsign='VE3IRR',
-            counter_num=0,
-            frequency=450000000,
-            if_gain=0,
-            message='Hello world!',
-            message_type='BROADCAST',
-            publickey_data='base64key',
-            recipient_gid=1234567891,
-            rf_gain=60,
-            sender_gid=1234567890,
-            silence_time=4000,
-            bb_gain=0):
-        try:
-            gr.top_block.__init__(self, "Gotenna Pro Tx Bladerf", catch_exceptions=True)
-        except TypeError:
-            gr.top_block.__init__(self, "Gotenna Pro Tx Bladerf")
+    def __init__(self, antenna='', baud_rate=9600, callsign='VE3IRR', counter_num=0, device_args='bladerf=0,biastee=1', frequency=450000000, message='Hello world!', message_type='BROADCAST', publickey_data='base64key', recipient_gid=1234567891, sender_gid=1234567890):
+        gr.top_block.__init__(self, "Gotenna Pro Tx Bladerf", catch_exceptions=True)
 
-        if baud_rate not in (2400, 4800, 9600):
-            raise ValueError("goTenna Pro baud_rate must be one of: 2400, 4800, 9600")
-
-        self.baud_rate = baud_rate
-        self.bandwidth = bandwidth
-        self.bb_gain = bb_gain
-        self.device_args = device_args
+        ##################################################
+        # Parameters
+        ##################################################
         self.antenna = antenna
+        self.baud_rate = baud_rate
         self.callsign = callsign
         self.counter_num = counter_num
+        self.device_args = device_args
         self.frequency = frequency
-        self.if_gain = if_gain
         self.message = message
         self.message_type = message_type
         self.publickey_data = publickey_data
         self.recipient_gid = recipient_gid
-        self.rf_gain = rf_gain
         self.sender_gid = sender_gid
-        self.silence_time = silence_time
 
+        ##################################################
+        # Variables
+        ##################################################
         self.samp_per_sym = samp_per_sym = 4
         self.offset = offset = 250000
         self.interp = interp = 480000 // baud_rate
         self.taps = taps = firdes.gaussian(1.0, samp_per_sym, 0.5, 64)
+        self.silence_time = silence_time = 4000
         self.samp_rate = samp_rate = baud_rate * samp_per_sym * interp
-        self.packets = packets = validate_options(self)
+        self.packets = packets = gotenna_packet.encode_pro_broadcast_packets(message_type, counter_num, sender_gid, recipient_gid, callsign, message, publickey_data)
         self.hw_rate = hw_rate = 5760000
         self.fsk_deviation_hz = fsk_deviation_hz = {2400: 400, 4800: 750, 9600: 1100}[baud_rate]
         self.data_chan = data_chan = 2
         self.control_chan = control_chan = 2
         self.center_freq = center_freq = frequency - offset
 
+        ##################################################
+        # Blocks
+        ##################################################
         self.rational_resampler_xxx_0 = filter.rational_resampler_ccc(
                 interpolation=(hw_rate // (baud_rate * samp_per_sym)),
                 decimation=1,
@@ -106,30 +78,30 @@ class gotenna_pro_tx_bladerf(gr.top_block):
         self.osmosdr_sink_0.set_sample_rate(hw_rate)
         self.osmosdr_sink_0.set_center_freq(center_freq, 0)
         self.osmosdr_sink_0.set_freq_corr(0, 0)
-        self.osmosdr_sink_0.set_gain(rf_gain, 0)
-        self.osmosdr_sink_0.set_if_gain(if_gain, 0)
-        self.osmosdr_sink_0.set_bb_gain(bb_gain, 0)
+        self.osmosdr_sink_0.set_gain(60, 0)
+        self.osmosdr_sink_0.set_if_gain(0, 0)
+        self.osmosdr_sink_0.set_bb_gain(0, 0)
         self.osmosdr_sink_0.set_antenna(antenna, 0)
-        self.osmosdr_sink_0.set_bandwidth(bandwidth, 0)
+        self.osmosdr_sink_0.set_bandwidth(1000000, 0)
         self.interp_fir_filter_xxx_0 = filter.interp_fir_filter_fff(1, taps)
         self.interp_fir_filter_xxx_0.declare_sample_delay(0)
         self.digital_map_bb_0 = digital.map_bb([-3, -1, 3, 1, 0])
         self.blocks_vector_source_x_2 = blocks.vector_source_f([offset], True, 1, [])
         self.blocks_vector_source_x_1 = blocks.vector_source_c([1], True, 1, [])
-        self.blocks_vector_source_x_0 = blocks.vector_source_b(
-            [0] * silence_time + gotenna_packet.pro_gfsk_symbols(packets) + [0] * silence_time,
-            False, 1, [])
+        self.blocks_vector_source_x_0 = blocks.vector_source_b([0]*silence_time+gotenna_packet.pro_gfsk_symbols(packets)+[0]*silence_time, False, 1, [])
         self.blocks_vco_c_1 = blocks.vco_c((baud_rate * samp_per_sym), (2 * math.pi * fsk_deviation_hz), 1.0)
-        self.blocks_vco_c_0 = blocks.vco_c(hw_rate, (2 * math.pi), 0.9)
-        self.blocks_repeat_2 = blocks.repeat(gr.sizeof_float * 1, samp_per_sym)
-        self.blocks_repeat_1 = blocks.repeat(
-            gr.sizeof_float * 1,
-            (8 * samp_per_sym * (hw_rate // (baud_rate * samp_per_sym))))
-        self.blocks_repeat_0 = blocks.repeat(gr.sizeof_gr_complex * 1, (8 * samp_per_sym))
+        self.blocks_vco_c_0 = blocks.vco_c(hw_rate, (2*math.pi), 0.9)
+        self.blocks_repeat_2 = blocks.repeat(gr.sizeof_float*1, samp_per_sym)
+        self.blocks_repeat_1 = blocks.repeat(gr.sizeof_float*1, (8 * samp_per_sym * (hw_rate // (baud_rate * samp_per_sym))))
+        self.blocks_repeat_0 = blocks.repeat(gr.sizeof_gr_complex*1, (8 * samp_per_sym))
         self.blocks_multiply_xx_1 = blocks.multiply_vcc(1)
         self.blocks_multiply_xx_0 = blocks.multiply_vcc(1)
         self.blocks_char_to_float_0 = blocks.char_to_float(1, 1)
 
+
+        ##################################################
+        # Connections
+        ##################################################
         self.connect((self.blocks_char_to_float_0, 0), (self.blocks_repeat_2, 0))
         self.connect((self.blocks_multiply_xx_0, 0), (self.rational_resampler_xxx_0, 0))
         self.connect((self.blocks_multiply_xx_1, 0), (self.osmosdr_sink_0, 0))
@@ -145,37 +117,6 @@ class gotenna_pro_tx_bladerf(gr.top_block):
         self.connect((self.interp_fir_filter_xxx_0, 0), (self.blocks_vco_c_1, 0))
         self.connect((self.rational_resampler_xxx_0, 0), (self.blocks_multiply_xx_1, 0))
 
-    def get_baud_rate(self):
-        return self.baud_rate
-
-    def set_baud_rate(self, baud_rate):
-        if baud_rate not in (2400, 4800, 9600):
-            raise ValueError("goTenna Pro baud_rate must be one of: 2400, 4800, 9600")
-        self.baud_rate = baud_rate
-        self.set_fsk_deviation_hz({2400: 400, 4800: 750, 9600: 1100}[self.baud_rate])
-        self.set_interp(480000 // self.baud_rate)
-        self.set_samp_rate(self.baud_rate * self.samp_per_sym * self.interp)
-        self.blocks_repeat_1.set_interpolation((8 * self.samp_per_sym * (self.hw_rate // (self.baud_rate * self.samp_per_sym))))
-
-    def get_bandwidth(self):
-        return self.bandwidth
-
-    def set_bandwidth(self, bandwidth):
-        self.bandwidth = bandwidth
-        self.osmosdr_sink_0.set_bandwidth(self.bandwidth, 0)
-
-    def get_bb_gain(self):
-        return self.bb_gain
-
-    def set_bb_gain(self, bb_gain):
-        self.bb_gain = bb_gain
-        self.osmosdr_sink_0.set_bb_gain(self.bb_gain, 0)
-
-    def get_device_args(self):
-        return self.device_args
-
-    def set_device_args(self, device_args):
-        self.device_args = device_args
 
     def get_antenna(self):
         return self.antenna
@@ -184,25 +125,35 @@ class gotenna_pro_tx_bladerf(gr.top_block):
         self.antenna = antenna
         self.osmosdr_sink_0.set_antenna(self.antenna, 0)
 
+    def get_baud_rate(self):
+        return self.baud_rate
+
+    def set_baud_rate(self, baud_rate):
+        self.baud_rate = baud_rate
+        self.set_fsk_deviation_hz({2400: 400, 4800: 750, 9600: 1100}[self.baud_rate])
+        self.set_interp(480000 // self.baud_rate)
+        self.set_samp_rate(self.baud_rate * self.samp_per_sym * self.interp)
+        self.blocks_repeat_1.set_interpolation((8 * self.samp_per_sym * (self.hw_rate // (self.baud_rate * self.samp_per_sym))))
+
     def get_callsign(self):
         return self.callsign
 
     def set_callsign(self, callsign):
         self.callsign = callsign
-        self.set_packets(gotenna_packet.encode_pro_broadcast_packets(
-            self.message_type, self.counter_num, self.sender_gid,
-            self.recipient_gid, self.callsign, self.message,
-            self.publickey_data))
+        self.set_packets(gotenna_packet.encode_pro_broadcast_packets(self.message_type, self.counter_num, self.sender_gid, self.recipient_gid, self.callsign, self.message, self.publickey_data))
 
     def get_counter_num(self):
         return self.counter_num
 
     def set_counter_num(self, counter_num):
         self.counter_num = counter_num
-        self.set_packets(gotenna_packet.encode_pro_broadcast_packets(
-            self.message_type, self.counter_num, self.sender_gid,
-            self.recipient_gid, self.callsign, self.message,
-            self.publickey_data))
+        self.set_packets(gotenna_packet.encode_pro_broadcast_packets(self.message_type, self.counter_num, self.sender_gid, self.recipient_gid, self.callsign, self.message, self.publickey_data))
+
+    def get_device_args(self):
+        return self.device_args
+
+    def set_device_args(self, device_args):
+        self.device_args = device_args
 
     def get_frequency(self):
         return self.frequency
@@ -211,69 +162,40 @@ class gotenna_pro_tx_bladerf(gr.top_block):
         self.frequency = frequency
         self.set_center_freq(self.frequency - self.offset)
 
-    def get_if_gain(self):
-        return self.if_gain
-
-    def set_if_gain(self, if_gain):
-        self.if_gain = if_gain
-        self.osmosdr_sink_0.set_if_gain(self.if_gain, 0)
-
     def get_message(self):
         return self.message
 
     def set_message(self, message):
         self.message = message
-        self.set_packets(gotenna_packet.encode_pro_broadcast_packets(
-            self.message_type, self.counter_num, self.sender_gid,
-            self.recipient_gid, self.callsign, self.message,
-            self.publickey_data))
+        self.set_packets(gotenna_packet.encode_pro_broadcast_packets(self.message_type, self.counter_num, self.sender_gid, self.recipient_gid, self.callsign, self.message, self.publickey_data))
 
     def get_message_type(self):
         return self.message_type
 
     def set_message_type(self, message_type):
         self.message_type = message_type
-        self.set_packets(gotenna_packet.encode_pro_broadcast_packets(
-            self.message_type, self.counter_num, self.sender_gid,
-            self.recipient_gid, self.callsign, self.message,
-            self.publickey_data))
+        self.set_packets(gotenna_packet.encode_pro_broadcast_packets(self.message_type, self.counter_num, self.sender_gid, self.recipient_gid, self.callsign, self.message, self.publickey_data))
 
     def get_publickey_data(self):
         return self.publickey_data
 
     def set_publickey_data(self, publickey_data):
         self.publickey_data = publickey_data
-        self.set_packets(gotenna_packet.encode_pro_broadcast_packets(
-            self.message_type, self.counter_num, self.sender_gid,
-            self.recipient_gid, self.callsign, self.message,
-            self.publickey_data))
+        self.set_packets(gotenna_packet.encode_pro_broadcast_packets(self.message_type, self.counter_num, self.sender_gid, self.recipient_gid, self.callsign, self.message, self.publickey_data))
 
     def get_recipient_gid(self):
         return self.recipient_gid
 
     def set_recipient_gid(self, recipient_gid):
         self.recipient_gid = recipient_gid
-        self.set_packets(gotenna_packet.encode_pro_broadcast_packets(
-            self.message_type, self.counter_num, self.sender_gid,
-            self.recipient_gid, self.callsign, self.message,
-            self.publickey_data))
-
-    def get_rf_gain(self):
-        return self.rf_gain
-
-    def set_rf_gain(self, rf_gain):
-        self.rf_gain = rf_gain
-        self.osmosdr_sink_0.set_gain(self.rf_gain, 0)
+        self.set_packets(gotenna_packet.encode_pro_broadcast_packets(self.message_type, self.counter_num, self.sender_gid, self.recipient_gid, self.callsign, self.message, self.publickey_data))
 
     def get_sender_gid(self):
         return self.sender_gid
 
     def set_sender_gid(self, sender_gid):
         self.sender_gid = sender_gid
-        self.set_packets(gotenna_packet.encode_pro_broadcast_packets(
-            self.message_type, self.counter_num, self.sender_gid,
-            self.recipient_gid, self.callsign, self.message,
-            self.publickey_data))
+        self.set_packets(gotenna_packet.encode_pro_broadcast_packets(self.message_type, self.counter_num, self.sender_gid, self.recipient_gid, self.callsign, self.message, self.publickey_data))
 
     def get_samp_per_sym(self):
         return self.samp_per_sym
@@ -313,9 +235,7 @@ class gotenna_pro_tx_bladerf(gr.top_block):
 
     def set_silence_time(self, silence_time):
         self.silence_time = silence_time
-        self.blocks_vector_source_x_0.set_data(
-            [0] * self.silence_time + gotenna_packet.pro_gfsk_symbols(self.packets) + [0] * self.silence_time,
-            [])
+        self.blocks_vector_source_x_0.set_data([0]*self.silence_time+gotenna_packet.pro_gfsk_symbols(self.packets)+[0]*self.silence_time, [])
 
     def get_samp_rate(self):
         return self.samp_rate
@@ -328,9 +248,7 @@ class gotenna_pro_tx_bladerf(gr.top_block):
 
     def set_packets(self, packets):
         self.packets = packets
-        self.blocks_vector_source_x_0.set_data(
-            [0] * self.silence_time + gotenna_packet.pro_gfsk_symbols(self.packets) + [0] * self.silence_time,
-            [])
+        self.blocks_vector_source_x_0.set_data([0]*self.silence_time+gotenna_packet.pro_gfsk_symbols(self.packets)+[0]*self.silence_time, [])
 
     def get_hw_rate(self):
         return self.hw_rate
@@ -366,23 +284,15 @@ class gotenna_pro_tx_bladerf(gr.top_block):
         self.osmosdr_sink_0.set_center_freq(self.center_freq, 0)
 
 
+
 def argument_parser():
     parser = ArgumentParser()
     parser.add_argument(
+        "--antenna", dest="antenna", type=str, default='',
+        help="Set Transmit antenna [default=%(default)r]")
+    parser.add_argument(
         "--baud-rate", dest="baud_rate", type=intx, default=9600,
         help="Set Baud rate [default=%(default)r]")
-    parser.add_argument(
-        "--bandwidth", dest="bandwidth", type=eng_float, default=eng_notation.num_to_str(float(1000000)),
-        help="Set transmit bandwidth [default=%(default)r]")
-    parser.add_argument(
-        "--bb-gain", dest="bb_gain", type=eng_float, default="0.0",
-        help="Set BB gain [default=%(default)r]")
-    parser.add_argument(
-        "--device-args", dest="device_args", type=str, default='bladerf=0,biastee=1',
-        help="Set complete Osmocom device arguments [default=%(default)r]")
-    parser.add_argument(
-        "--antenna", dest="antenna", type=str, default='',
-        help="Set transmit antenna; empty string selects backend default [default=%(default)r]")
     parser.add_argument(
         "--callsign", dest="callsign", type=str, default='VE3IRR',
         help="Set Sender callsign [default=%(default)r]")
@@ -390,11 +300,11 @@ def argument_parser():
         "--counter-num", dest="counter_num", type=intx, default=0,
         help="Set Counter [default=%(default)r]")
     parser.add_argument(
+        "--device-args", dest="device_args", type=str, default='bladerf=0,biastee=1',
+        help="Set Osmocom device arguments [default=%(default)r]")
+    parser.add_argument(
         "--frequency", dest="frequency", type=eng_float, default=eng_notation.num_to_str(float(450000000)),
         help="Set Frequency [default=%(default)r]")
-    parser.add_argument(
-        "--if-gain", dest="if_gain", type=eng_float, default="0.0",
-        help="Set IF gain [default=%(default)r]")
     parser.add_argument(
         "--message", dest="message", type=str, default='Hello world!',
         help="Set Message [default=%(default)r]")
@@ -408,47 +318,27 @@ def argument_parser():
         "--recipient-gid", dest="recipient_gid", type=intx, default=1234567891,
         help="Set Recipient GID [default=%(default)r]")
     parser.add_argument(
-        "--rf-gain", dest="rf_gain", type=eng_float, default="60.0",
-        help="Set RF gain [default=%(default)r]")
-    parser.add_argument(
         "--sender-gid", dest="sender_gid", type=intx, default=1234567890,
         help="Set Sender GID [default=%(default)r]")
-    parser.add_argument(
-        "--silence-time", dest="silence_time", type=intx, default=4000,
-        help="Set silence padding [default=%(default)r]")
     return parser
 
 
 def main(top_block_cls=gotenna_pro_tx_bladerf, options=None):
     if options is None:
         options = argument_parser().parse_args()
-    tb = top_block_cls(
-        baud_rate=options.baud_rate,
-        bandwidth=options.bandwidth,
-        bb_gain=options.bb_gain,
-        device_args=options.device_args,
-        antenna=options.antenna,
-        callsign=options.callsign,
-        counter_num=options.counter_num,
-        frequency=options.frequency,
-        if_gain=options.if_gain,
-        message=options.message,
-        message_type=options.message_type,
-        publickey_data=options.publickey_data,
-        recipient_gid=options.recipient_gid,
-        rf_gain=options.rf_gain,
-        sender_gid=options.sender_gid,
-        silence_time=options.silence_time)
+    tb = top_block_cls(antenna=options.antenna, baud_rate=options.baud_rate, callsign=options.callsign, counter_num=options.counter_num, device_args=options.device_args, frequency=options.frequency, message=options.message, message_type=options.message_type, publickey_data=options.publickey_data, recipient_gid=options.recipient_gid, sender_gid=options.sender_gid)
 
     def sig_handler(sig=None, frame=None):
         tb.stop()
         tb.wait()
+
         sys.exit(0)
 
     signal.signal(signal.SIGINT, sig_handler)
     signal.signal(signal.SIGTERM, sig_handler)
 
     tb.start()
+
     tb.wait()
 
 
