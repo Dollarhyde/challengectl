@@ -1,3 +1,2 @@
 dev_id,osmosdr_device_string
 0,"bladerf=longhexserialnumberhere,biastee=1"
-1,"uhd,serial=usrpserialnumberhere"
